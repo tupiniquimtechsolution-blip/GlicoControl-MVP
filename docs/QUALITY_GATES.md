@@ -48,3 +48,4 @@ Conta → lembrete → registro → dashboard → calendário → relatório →
 | E2E fluxo canônico | `e2e/canonical-flow.yaml` (Maestro) + `src/__tests__/flows.test.tsx` | componentes **PASS**; Maestro em device **BLOCKED** (sem Android SDK/emulador; `curl` de toolchain bloqueado pelo proxy) |
 | Build nativo | `npx expo run:android` | **BLOCKED** — sem Android SDK/JDK no ambiente; comando exato: `cd GlicoControl-MVP && npx expo prebuild -p android && npx expo run:android` |
 | CI | `.github/workflows/ci.yml` (espelha todos os gates acima) | criado; execução **BLOCKED** até o push ser processado pelo Actions |
+| Build web (produção) | `npx expo export --platform web` | **PASS** (Metro bundle + static render de todas as rotas; requer `metro.config.js` com wasm em assetExts) |
