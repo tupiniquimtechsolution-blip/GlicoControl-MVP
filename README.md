@@ -4,9 +4,9 @@ Aplicativo mobile-first para registro e acompanhamento de medições de glicemia
 
 ## Estado
 
-**BOOTSTRAP / PRÉ-DESENVOLVIMENTO**
+**FASE 0 CONCLUÍDA (auditoria e planejamento) → PRÉ-IMPLEMENTAÇÃO**
 
-Este repositório foi preparado para receber a implementação full stack. O agente de desenvolvimento deve ler `AGENTS.md` e a documentação em `docs/` antes de alterar código.
+Este repositório foi preparado para receber a implementação full stack. O agente de desenvolvimento deve ler `AGENTS.md` e a documentação em `docs/` antes de alterar código. A Fase 0 (Issue #1) registrou diagnóstico verificado, arquitetura, modelo de dados, estratégia de RLS, offline/sincronização, navegação/UX, backlog por fases, riscos e critérios de aceite em `docs/planning/`.
 
 ## Escopo do MVP
 
@@ -53,3 +53,5 @@ Os tokens iniciais estão em `src/theme/themes.ts`.
 - `docs/TOOLBOX_DECISIONS.md` — decisões resultantes do Tupiniquim Toolbox.
 - `docs/QUALITY_GATES.md` — gates obrigatórios antes de release.
 - `PROMPT_AGENT_FULLSTACK.md` — prompt autocontido de continuidade/desenvolvimento.
+- `docs/planning/` — resultado da Fase 0 (auditoria, arquitetura definida, modelo de dados, RLS, offline, UX, backlog, riscos).
+- `scripts/audit/contrast-audit.mjs` — verificação reproduzível dos cinco temas (estrutura + contraste WCAG AA).
