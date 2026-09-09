@@ -10,7 +10,7 @@ export async function createMemoryDb(): Promise<Db> {
   const meta = new Map<string, string>()
   const rowsOf = (t: TableName) => tables.get(t)!
   const pkOf = (t: TableName) => REGISTRY[t].pk
-  const match = (row: Row, opts?: QueryOpts) =>
+  const match = (row: Row, opts?: QueryOpts): boolean =>
     (opts?.where ?? []).every(c => {
       const v = row[c.col]
       if (c.op === 'isNull') return v === null || v === undefined
@@ -20,8 +20,8 @@ export async function createMemoryDb(): Promise<Db> {
       switch (c.op) {
         case '=': return String(v) === String(ref)
         case '!=': return String(v) !== String(ref)
-        case '>=': return v >= (ref as never)
-        case '<=': return v <= (ref as never)
+        case '>=': return String(v) >= String(ref)
+        case '<=': return String(v) <= String(ref)
         default: return false
       }
     })

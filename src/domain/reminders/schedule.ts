@@ -12,24 +12,23 @@ export type RecurringSchedule = {
 }
 
 export function nextOccurrences(schedule: RecurringSchedule, from: Date, count: number, maxLookoutDays = 14): Date[] {
-  const out: Date[] = []
-  if (!schedule.daysOfWeek.length) return out
+  if (!schedule.daysOfWeek.length) return out0
   const [hh, mm] = schedule.timeOfDay.split(':').map(Number)
-  if (!Number.isFinite(hh) || !Number.isFinite(mm)) return out
+  if (!Number.isFinite(hh) || !Number.isFinite(mm) || hh < 0 || hh > 23 || mm < 0 || mm > 59) return out0
   const days = new Set(schedule.daysOfWeek.filter(d => d >= 0 && d <= 6))
-  if (!days.size) return out
-  const cursor = new Date(from)
-  cursor.setHours(0, 0, 0, 0)
-  for (let i = 0; i < maxLookoutDays * 2 && out.length < count; i++) {
-    const day = (cursor.getDay() + Math.floor(i / 2)) % 7
-    const d = new Date(cursor)
-    d.setDate(cursor.getDate() + Math.floor(i / 2))
+  if (!days.size) return out0
+  const out: Date[] = []
+  for (let i = 0; i < maxLookoutDays && out.length < count; i++) {
+    const d = new Date(from)
+    d.setHours(0, 0, 0, 0)
+    d.setDate(d.getDate() + i)
+    if (!days.has(d.getDay())) continue
     d.setHours(hh, mm, 0, 0)
-    if (d.getTime() > from.getTime() && days.has(d.getDay())) out.push(d)
-    void day
+    if (d.getTime() > from.getTime()) out.push(d)
   }
-  return out.sort((a, b) => a.getTime() - b.getTime()).slice(0, count)
+  return out.slice(0, count)
 }
+const out0: Date[] = []
 
 export function addMinutes(date: Date, minutes: number): Date {
   return new Date(date.getTime() + minutes * 60_000)

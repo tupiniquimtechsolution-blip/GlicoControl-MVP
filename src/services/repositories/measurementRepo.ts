@@ -5,7 +5,7 @@ import { enqueue } from '../sync/outbox'
 import { GlucoseContext } from '../../domain/glucose/contexts'
 import { GlucoseMeasurement, MeasurementDraft } from '../../domain/glucose/types'
 import { GlucoseUnit } from '../../domain/glucose/units'
-import { localToIso, minuteKey, nowHm, todayYmd } from '../../domain/dates/month'
+import { localToIso, minuteKey, todayYmd } from '../../domain/dates/month'
 import { validateDraft } from '../../domain/glucose/validation'
 
 export type NewMeasurement = {

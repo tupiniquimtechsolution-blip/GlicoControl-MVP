@@ -28,6 +28,12 @@ export const motion = {
   base: 200,
 } as const
 
+/** sobreposição de modais — define em tokens (único lugar permitido para valores não-tema;
+ *  funciona nos cinco temas pois é neutra com alpha). */
+export const overlay = {
+  scrim: 'rgba(9,9,11,0.53)',
+} as const
+
 export const layout = {
   /** Largura de conteúdo no web preview (desktop); em device é 100%. */
   webMaxWidth: 480,

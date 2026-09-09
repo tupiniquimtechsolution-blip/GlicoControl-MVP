@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - name: Lint (erros zeram o build)
+        run: npx eslint . --quiet
+      - name: Typecheck
+        run: npx tsc --noEmit
+      - name: Unit + integration + security tests (jest)
+        run: npx jest --forceExit --ci
+      - name: RLS isolation (PGlite — Postgres real)
+        run: bash scripts/rls/run-local.sh
+      - name: Audit de contraste/cores dos 5 temas
+        run: node scripts/audit/contrast-audit.mjs
+      - name: Secret scan
+        run: bash scripts/audit/secret-scan.sh
+      - name: Textos clínicos proibidos
+        run: bash scripts/audit/forbidden-texts.sh
+      - name: Dependency audit (high+critical bloqueiam)
+        run: npm audit --omit=dev --audit-level=high
+  web-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - name: Expo export (web) — valida o bundle de produção
+        run: npx expo export --platform web

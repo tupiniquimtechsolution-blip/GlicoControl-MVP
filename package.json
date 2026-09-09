@@ -12,13 +12,15 @@
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "test": "jest",
-    "test:coverage": "jest --coverage",
+    "test": "jest --forceExit",
+    "test:coverage": "jest --coverage --forceExit",
     "audit:themes": "node scripts/audit/contrast-audit.mjs",
     "audit:deps": "npm audit --omit=dev --audit-level=high",
-    "scan:secrets": "node scripts/audit/secret-scan.mjs",
+    "scan:secrets": "bash scripts/audit/secret-scan.sh",
     "test:rls": "bash scripts/rls/run-local.sh",
-    "e2e:list": "maestro test e2e/canonical-flow.yaml --dry-run || echo 'Maestro não disponível neste ambiente — ver e2e/README.md'"
+    "e2e:list": "maestro test e2e/canonical-flow.yaml --dry-run || echo 'Maestro não disponível neste ambiente — ver e2e/README.md'",
+    "scan:texts": "bash scripts/audit/forbidden-texts.sh",
+    "build:web": "expo export --platform web"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.0",
@@ -82,5 +84,8 @@
       "/node_modules/",
       "/src/test/"
     ]
+  },
+  "overrides": {
+    "uuid": "^11.1.1"
   }
 }

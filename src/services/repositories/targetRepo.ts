@@ -2,7 +2,7 @@
 import { Db, Row, uuidv7 } from '../db/types'
 import { enqueue } from '../sync/outbox'
 import { GlucoseUnit } from '../../domain/glucose/units'
-import { GlucoseContext, isGlucoseContext } from '../../domain/glucose/contexts'
+import { GlucoseContext } from '../../domain/glucose/contexts'
 
 export type Target = { context: 'any' | GlucoseContext; unit: GlucoseUnit; min: number | null; max: number | null; notes: string | null; id: string }
 

@@ -89,7 +89,8 @@ export class SyncEngine {
         for (const op of ops) {
           try {
             if (op.op === 'upsert') {
-              const res = await this.gateway.pushUpsert(def.name, op.payload)
+              // LWW: o RPC 0011 usa payload._proposed_updated_at como timestamp proposto do cliente
+              const res = await this.gateway.pushUpsert(def.name, { ...op.payload, _proposed_updated_at: op.proposed_updated_at })
               if (res === 'not-found-parent') {
                 // pai ainda não sincronizado: mantém na fila p/ novo backoff (push do pai ocorre antes na ordem)
                 await markRetry(this.db, op, 'parent-pending')

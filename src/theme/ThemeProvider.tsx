@@ -28,7 +28,7 @@ export type AppThemeContextValue = {
 const ThemeContext = createContext<AppThemeContextValue | null>(null)
 
 function useSystemDark(): boolean {
-  const [scheme, setScheme] = useState<ColorSchemeName>(() => Appearance.getColorScheme())
+  const [scheme, setScheme] = useState<ColorSchemeName>(() => Appearance.getColorScheme() ?? 'light')
   useEffect(() => {
     const sub = Appearance.addChangeListener(({ colorScheme }) => setScheme(colorScheme))
     return () => sub.remove()
@@ -39,16 +39,16 @@ function useSystemDark(): boolean {
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const systemDark = useSystemDark()
   const [preference, setPreferenceState] = useState<ThemePreference>('greenWhite')
-  const [hydrated, setHydrated] = useState(false)
 
   useEffect(() => {
+    // renderiza imediatamente com o default e aplica a preferência salva quando resolver (sem flash bloqueante)
     AsyncStorage.getItem(STORAGE_KEY)
       .then(stored => {
         if (stored === 'system' || themeOrder.includes(stored as never)) {
           setPreferenceState(stored as ThemePreference)
         }
       })
-      .finally(() => setHydrated(true))
+      .catch(() => undefined)
   }, [])
 
   const setPreference = useCallback((pref: ThemePreference) => {
@@ -69,11 +69,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     [theme, preference, setPreference]
   )
 
-  return (
-    <ThemeContext.Provider value={value}>
-      {hydrated ? children : null}
-    </ThemeContext.Provider>
-  )
+  return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>
 }
 
 export function useAppTheme(): AppThemeContextValue {

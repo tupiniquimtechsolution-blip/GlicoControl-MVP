@@ -26,10 +26,8 @@ export async function exportToFile(payload: ExportPayload): Promise<string> {
     a.click()
     return url
   }
-  const { File, Paths } = require('expo-file-system') as typeof import('expo-file-system')
-  const file = new File(Paths.cache, 'glicocontrol-exportacao.json')
-  if (file.exists) file.delete()
-  file.create({ overwrite: true })
-  file.textSync = text
-  return file.uri
+  const FS = require('expo-file-system/legacy') as typeof import('expo-file-system/legacy')
+  const uri = `${FS.cacheDirectory}glicocontrol-exportacao.json`
+  await FS.writeAsStringAsync(uri, text, { encoding: 'utf8' } as never)
+  return uri
 }

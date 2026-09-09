@@ -41,5 +41,3 @@ export function mapAuthError(message: string): string {
   if (m.includes('network') || m.includes('failed to fetch')) return 'Sem conexão com o servidor. Verifique a internet.'
   return 'Não foi possível concluir. Tente novamente.'
 }
-
-export type { SessionUser }

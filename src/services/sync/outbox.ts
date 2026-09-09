@@ -71,7 +71,7 @@ export async function dueOps(db: Db, limit: number, nowIso = new Date().toISOStr
     limit,
   })
   return rows
-    .filter(r => r.next_retry_at <= nowIso)
+    .filter(r => String(r.next_retry_at) <= nowIso)
     .map(r => ({ ...r, op: r.op as OutboxOp, payload: JSON.parse(r.payload) as Row, attempts: Number(r.attempts) }) as unknown as OutboxEntry)
 }
 
