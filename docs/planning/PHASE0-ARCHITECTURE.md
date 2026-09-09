@@ -19,7 +19,7 @@ GlicoControl-MVP/
 │   │   │                     #   de tipografia/espaçamento/radius/motion + ThemeProvider
 │   └── test/                 # harness de testes, fixtures, factories
 ├── supabase/
-│   ├── migrations/           # SQL versionadoNNNN... `0001_init.sql` ...)
+│   ├── migrations/           # SQL versionado (0001_init.sql, 0002_*.sql, ...)
 │   └── tests/                # testes de RLS/policies executáveis via psql (ver PHASE0-RLS.md)
 ├── e2e/                      # fluxos Maestro (canônico §24 do prompt mestre)
 ├── docs/ · scripts/ · AGENTS.md · README.md · PROMPT_AGENT_FULLSTACK.md
