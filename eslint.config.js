@@ -7,7 +7,8 @@ module.exports = defineConfig([
   expoConfig,
   prettier,
   {
-    ignores: ['dist/*', '.expo/*', 'coverage/*', 'node_modules/*', 'supabase/**', 'scripts/**', 'docs/**', 'assets/**', '*.config.js', 'babel.config.js'],
+    ignores: ['dist/*', '.expo/*', 'coverage/*', 'node_modules/*', 'supabase/**', 'scripts/**', 'docs/**', 'assets/**', '*.config.js', 'babel.config.js',
+      "dist/**", "dist-web/**", "coverage/**", "web-build/**",],
   },
   {
     // Arquitetura (Fase 0/1): domain não conhece React/React Native/Supabase.
