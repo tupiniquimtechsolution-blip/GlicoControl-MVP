@@ -1,40 +1,43 @@
-import { parseSupabaseAuthError, parseSupabaseAuthRedirect } from '../services/supabase/authRedirect'
+import {
+  AUTH_CONFIRM_REDIRECT_URL,
+  AUTH_RECOVERY_REDIRECT_URL,
+  parseSupabaseAuthError,
+  parseSupabasePkceRedirect,
+} from '../services/supabase/authRedirect'
 
-describe('Supabase auth mobile redirect', () => {
-  it('extrai sessão do fragmento de confirmação', () => {
-    expect(parseSupabaseAuthRedirect('glicocontrol://auth-callback#access_token=abc&refresh_token=def&type=signup')).toEqual({
-      accessToken: 'abc',
-      refreshToken: 'def',
-      type: 'signup',
-    })
+describe('Supabase Auth mobile PKCE redirect', () => {
+  it('extrai apenas o Auth Code do callback de confirmação', () => {
+    expect(parseSupabasePkceRedirect(`${AUTH_CONFIRM_REDIRECT_URL}?code=abc-123`, 'confirm')).toEqual({ code: 'abc-123' })
   })
 
-  it('extrai sessão da query de recovery e decodifica valores', () => {
-    expect(parseSupabaseAuthRedirect('glicocontrol://auth-callback?access_token=a%2Bb&refresh_token=r%2F1&type=recovery')).toEqual({
-      accessToken: 'a+b',
-      refreshToken: 'r/1',
-      type: 'recovery',
-    })
+  it('extrai e decodifica o Auth Code do callback de recovery', () => {
+    expect(parseSupabasePkceRedirect(`${AUTH_RECOVERY_REDIRECT_URL}?code=a%2Bb%2F1`, 'recovery')).toEqual({ code: 'a+b/1' })
   })
 
   it('aceita callback canônico com barra final', () => {
-    expect(parseSupabaseAuthRedirect('glicocontrol://auth-callback/#access_token=a&refresh_token=b&type=signup')).toEqual({
-      accessToken: 'a',
-      refreshToken: 'b',
-      type: 'signup',
-    })
+    expect(parseSupabasePkceRedirect(`${AUTH_CONFIRM_REDIRECT_URL}/?code=abc`, 'confirm')).toEqual({ code: 'abc' })
   })
 
-  it('rejeita esquema, host/rota não canônica e payload incompleto', () => {
-    expect(parseSupabaseAuthRedirect('https://evil.example/#access_token=a&refresh_token=b')).toBeNull()
-    expect(parseSupabaseAuthRedirect('glicocontrol://outro#access_token=a&refresh_token=b')).toBeNull()
-    expect(parseSupabaseAuthRedirect('glicocontrol://auth-callback.evil#access_token=a&refresh_token=b')).toBeNull()
-    expect(parseSupabaseAuthRedirect('glicocontrol://auth-callback#access_token=a')).toBeNull()
+  it('não mistura callback de confirmação com recovery', () => {
+    expect(parseSupabasePkceRedirect(`${AUTH_RECOVERY_REDIRECT_URL}?code=abc`, 'confirm')).toBeNull()
+    expect(parseSupabasePkceRedirect(`${AUTH_CONFIRM_REDIRECT_URL}?code=abc`, 'recovery')).toBeNull()
   })
 
-  it('lê erro do redirect sem expor parâmetros como sessão', () => {
-    const url = 'glicocontrol://auth-callback#error=access_denied&error_description=Link%20expired'
-    expect(parseSupabaseAuthError(url)).toBe('Link expired')
-    expect(parseSupabaseAuthRedirect(url)).toBeNull()
+  it('rejeita esquema/host não canônico, lookalike e payload sem code', () => {
+    expect(parseSupabasePkceRedirect('https://evil.example/?code=abc', 'confirm')).toBeNull()
+    expect(parseSupabasePkceRedirect('glicocontrol://outro?code=abc', 'confirm')).toBeNull()
+    expect(parseSupabasePkceRedirect('glicocontrol://auth-confirm.evil?code=abc', 'confirm')).toBeNull()
+    expect(parseSupabasePkceRedirect(AUTH_CONFIRM_REDIRECT_URL, 'confirm')).toBeNull()
+  })
+
+  it('não aceita access/refresh tokens do antigo fluxo implícito', () => {
+    const implicit = `${AUTH_CONFIRM_REDIRECT_URL}#access_token=secret-access&refresh_token=secret-refresh`
+    expect(parseSupabasePkceRedirect(implicit, 'confirm')).toBeNull()
+  })
+
+  it('lê erro apenas do callback esperado', () => {
+    const url = `${AUTH_RECOVERY_REDIRECT_URL}?error=access_denied&error_description=Link%20expired`
+    expect(parseSupabaseAuthError(url, 'recovery')).toBe('Link expired')
+    expect(parseSupabaseAuthError(url, 'confirm')).toBeNull()
   })
 })
