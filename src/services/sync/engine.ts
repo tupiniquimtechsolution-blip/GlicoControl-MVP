@@ -140,19 +140,23 @@ export class SyncEngine {
     }
   }
 
+  /**
+   * Logout/exclusão local deve remover TODO o estado associado ao usuário do aparelho:
+   * dados clínicos, perfil, outbox e cursores/metadados de sincronização.
+   */
   async wipeLocal() {
     for (const def of SYNC_TABLES) {
       for (const row of await this.db.select(def.name)) await this.db.deleteById(def.name, String(row.id))
     }
+    for (const row of await this.db.select('local_profile')) {
+      await this.db.deleteById('local_profile', String(row.id))
+    }
     await clearOutbox(this.db)
-    for (const key of ['user_id', ...(await metaKeys(this.db))]) await this.db.setMeta(key, '')
-    this.setStatus({ state: 'idle', pending: 0, lastSyncAt: null })
+    for (const row of await this.db.select('sync_meta')) {
+      await this.db.deleteById('sync_meta', String(row.key))
+    }
+    this.setStatus({ state: 'idle', pending: 0, lastSyncAt: null, error: null })
   }
-}
-
-async function metaKeys(db: Db): Promise<string[]> {
-  // meta é um KV simples; chaves conhecidas do engine:
-  return SYNC_TABLES.map(d => `last_pulled_at.${d.name}`)
 }
 
 async function dueOpsFor(db: Db, table: string, batch: number): Promise<OutboxEntry[]> {
