@@ -13,3 +13,6 @@ coverage/
 *.p8
 *.p12
 *.mobileprovision
+expo-env.d.ts
+*.tsbuildinfo
+dist-web/
