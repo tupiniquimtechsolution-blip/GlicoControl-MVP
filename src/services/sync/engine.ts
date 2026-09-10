@@ -152,9 +152,19 @@ export class SyncEngine {
       await this.db.deleteById('local_profile', String(row.id))
     }
     await clearOutbox(this.db)
+
+    // setMeta cobre também o driver em memória usado nos testes/web preview; em SQLite
+    // removemos em seguida as linhas persistidas para não deixar identificadores residuais.
+    const knownMetaKeys = [
+      'user_id',
+      'dashboard.seen-month',
+      ...SYNC_TABLES.map(def => `last_pulled_at.${def.name}`),
+    ]
+    for (const key of knownMetaKeys) await this.db.setMeta(key, '')
     for (const row of await this.db.select('sync_meta')) {
       await this.db.deleteById('sync_meta', String(row.key))
     }
+
     this.setStatus({ state: 'idle', pending: 0, lastSyncAt: null, error: null })
   }
 }
