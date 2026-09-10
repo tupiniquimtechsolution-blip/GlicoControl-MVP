@@ -11,6 +11,7 @@ import { AppState } from 'react-native'
 import { CONSENT_VERSION } from '../../domain/legal/texts'
 import { getSupabase, mapAuthError } from '../../services/supabase/client'
 import { isSupabaseConfigured } from '../../services/supabase/config'
+import { AUTH_CONFIRM_REDIRECT_URL, AUTH_RECOVERY_REDIRECT_URL } from '../../services/supabase/authRedirect'
 import { useApp } from '../../services/appContext'
 import { logEvent } from '../../services/observability/log'
 
@@ -37,7 +38,6 @@ type AuthApi = {
 
 const Ctx = createContext<AuthApi | null>(null)
 const DEMO_KEY = 'glicocontrol.demo-session'
-export const AUTH_REDIRECT_URL = 'glicocontrol://auth-callback'
 const demoOn = typeof process !== 'undefined' && process.env.EXPO_PUBLIC_DEMO_MODE === 'demo-local' && !!(__DEV__ ?? false)
 
 function metadataString(session: Session, key: string): string | null {
@@ -240,7 +240,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         email: email.trim(),
         password,
         options: {
-          emailRedirectTo: AUTH_REDIRECT_URL,
+          emailRedirectTo: AUTH_CONFIRM_REDIRECT_URL,
           data: {
             display_name: cleanName || null,
             consent_version: CONSENT_VERSION,
@@ -285,7 +285,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const sendPasswordReset = useCallback(async (email: string) => {
     if (demoOn || !isSupabaseConfigured()) return { ok: false, message: 'Indisponível neste ambiente.' }
     const supabase = getSupabase()!
-    const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), { redirectTo: AUTH_REDIRECT_URL })
+    const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), { redirectTo: AUTH_RECOVERY_REDIRECT_URL })
     if (error) return { ok: false, message: mapAuthError(error.message) }
     return { ok: true, message: 'Se o e-mail estiver cadastrado, você receberá um link de redefinição. Confira a caixa de entrada (e spam).' }
   }, [])
