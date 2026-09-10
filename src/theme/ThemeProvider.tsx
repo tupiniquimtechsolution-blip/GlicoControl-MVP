@@ -20,7 +20,6 @@ export type AppThemeContextValue = {
   theme: AppTheme
   preference: ThemePreference
   setPreference: (pref: ThemePreference) => void
-  /** utilitários prontos do design system */
   t: { spacing: typeof spacing; radius: typeof radius; typography: typeof typography; touch: typeof touch; motion: typeof motion }
   fonts: ThemeFonts
 }
@@ -41,14 +40,18 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [preference, setPreferenceState] = useState<ThemePreference>('greenWhite')
 
   useEffect(() => {
-    // renderiza imediatamente com o default e aplica a preferência salva quando resolver (sem flash bloqueante)
+    let active = true
     AsyncStorage.getItem(STORAGE_KEY)
       .then(stored => {
+        if (!active) return
         if (stored === 'system' || themeOrder.includes(stored as never)) {
           setPreferenceState(stored as ThemePreference)
         }
       })
       .catch(() => undefined)
+    return () => {
+      active = false
+    }
   }, [])
 
   const setPreference = useCallback((pref: ThemePreference) => {
@@ -77,5 +80,3 @@ export function useAppTheme(): AppThemeContextValue {
   if (!ctx) throw new Error('useAppTheme deve ser usado dentro de <ThemeProvider>')
   return ctx
 }
-
-

@@ -71,20 +71,43 @@ type ChangeFn = () => void
 export function AppCoreProvider({ core, children }: { core: AppCore; children: React.ReactNode }) {
   const [revision, setRevision] = useState(0)
   const listeners = useRef(new Set<ChangeFn>())
+  const mounted = useRef(true)
+
+  useEffect(() => {
+    mounted.current = true
+    return () => {
+      mounted.current = false
+      listeners.current.clear()
+    }
+  }, [])
 
   const bump = useCallback(() => {
-    setRevision(r => r + 1)
+    if (mounted.current) setRevision(r => r + 1)
     void core.sync.notifyPending()
-    if (core.gateway.configured) void core.sync.syncNow().then(() => setRevision(r => r + 1))
+    if (core.gateway.configured) {
+      void core.sync.syncNow().then(() => {
+        if (mounted.current) setRevision(r => r + 1)
+      })
+    }
     for (const fn of listeners.current) fn()
   }, [core])
 
   useEffect(() => {
+    let active = true
     const sub = AppState.addEventListener('change', state => {
-      if (state === 'active') void core.sync.syncNow().then(() => setRevision(r => r + 1))
+      if (state === 'active') {
+        void core.sync.syncNow().then(() => {
+          if (active && mounted.current) setRevision(r => r + 1)
+        })
+      }
     })
-    void core.sync.syncNow().then(() => setRevision(r => r + 1))
-    return () => sub.remove()
+    void core.sync.syncNow().then(() => {
+      if (active && mounted.current) setRevision(r => r + 1)
+    })
+    return () => {
+      active = false
+      sub.remove()
+    }
   }, [core])
 
   const value = useMemo<AppServices>(() => ({ ...core, revision, bump }), [core, revision, bump])

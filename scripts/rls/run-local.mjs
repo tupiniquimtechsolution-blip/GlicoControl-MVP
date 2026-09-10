@@ -1,12 +1,12 @@
 #!/usr/bin/env node
 /**
  * Runner de testes SQL do backend com PGlite (Postgres 16 real, sem Docker).
- * Uso: node scripts/rls/run-local.mjs [--keep-fail]
+ * Uso: node scripts/rls/run-local.mjs
  * Saída: 'PASS ...' por seção ou erro com a seção que falhou (exit 1).
  */
 import { readFileSync, readdirSync } from 'node:fs'
 import { join, dirname } from 'node:path'
-import { fileURLToPath, pathToFileURL } from 'node:url'
+import { fileURLToPath } from 'node:url'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const repoRoot = join(here, '..', '..')
@@ -39,8 +39,11 @@ try {
   }
   console.log(' ok')
 
-  const isolation = readFileSync(join(repoRoot, 'supabase', 'tests', 'rls_isolation.sql'), 'utf8')
-  const sections = isolation.split(/^--@section\s+/m).slice(1)
+  const suiteFiles = ['rls_isolation.sql', 'rpc_privileges.sql']
+  const suite = suiteFiles
+    .map(file => readFileSync(join(repoRoot, 'supabase', 'tests', file), 'utf8'))
+    .join('\n')
+  const sections = suite.split(/^--@section\s+/m).slice(1)
   let passCount = 0
   for (const chunk of sections) {
     const nl = chunk.indexOf('\n')

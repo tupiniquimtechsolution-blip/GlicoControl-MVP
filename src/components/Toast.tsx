@@ -1,5 +1,5 @@
 /** Toast simples com fila (sem lib externa). Mensagens anunciadas para leitores de tela. */
-import React, { createContext, useCallback, useContext, useState } from 'react'
+import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
 import { Text, View } from 'react-native'
 import { useAppTheme } from '../theme/ThemeProvider'
 
@@ -13,11 +13,25 @@ let nextId = 1
 
 export function ToastProvider({ children }: { children: React.ReactNode }) {
   const [items, setItems] = useState<ToastItem[]>([])
+  const timers = useRef(new Set<ReturnType<typeof setTimeout>>())
+
+  useEffect(() => {
+    return () => {
+      for (const timer of timers.current) clearTimeout(timer)
+      timers.current.clear()
+    }
+  }, [])
+
   const show = useCallback((text: string, kind: ToastKind = 'success') => {
     const id = nextId++
     setItems(list => [...list, { id, text, kind }])
-    setTimeout(() => setItems(list => list.filter(i => i.id !== id)), 3800)
+    const timer = setTimeout(() => {
+      timers.current.delete(timer)
+      setItems(list => list.filter(i => i.id !== id))
+    }, 3800)
+    timers.current.add(timer)
   }, [])
+
   return (
     <Ctx.Provider value={{ show }}>
       {children}

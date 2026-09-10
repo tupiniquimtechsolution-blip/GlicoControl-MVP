@@ -41,41 +41,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isDemo, setDemo] = useState(false)
   const [authError, setAuthError] = useState<string | null>(null)
 
-  // Sessão inicial + refresh periódico
   useEffect(() => {
     let cancelled = false
-    void (async () => {
-      if (demoOn) {
-        const stored = await AsyncStorage.getItem(DEMO_KEY)
-        if (!cancelled) {
-          setDemo(true)
-          if (stored) {
-            const parsed = JSON.parse(stored) as AuthUser
-            setUser(parsed)
-            app.setUserId(parsed.id)
-            setStatus('signed-in')
-          } else setStatus('signed-out')
-        }
-        return
-      }
-      const supabase = getSupabase()
-      if (!supabase) {
-        setStatus('signed-out')
-        return
-      }
-      const { data } = await supabase.auth.getSession()
-      if (cancelled) return
-      applySession(data.session)
-      const sub = supabase.auth.onAuthStateChange((_ev, session) => applySession(session))
-      const appSub = AppState.addEventListener('change', state => {
-        if (state === 'active') void supabase.auth.getSession().then(({ data: d }) => applySession(d.session))
-      })
-      cancelled = false
-      return () => {
-        void Promise.resolve(sub).then(s => s.data.subscription.unsubscribe())
-        appSub.remove()
-      }
-    })()
+    let unsubscribeAuth: (() => void) | undefined
+    let appSub: { remove: () => void } | undefined
+
     function applySession(session: Session | null) {
       if (cancelled) return
       if (session?.user) {
@@ -87,6 +57,50 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         app.setUserId(null)
         setStatus('signed-out')
       }
+    }
+
+    void (async () => {
+      if (demoOn) {
+        const stored = await AsyncStorage.getItem(DEMO_KEY)
+        if (cancelled) return
+        setDemo(true)
+        if (stored) {
+          const parsed = JSON.parse(stored) as AuthUser
+          setUser(parsed)
+          app.setUserId(parsed.id)
+          setStatus('signed-in')
+        } else {
+          setStatus('signed-out')
+        }
+        return
+      }
+
+      const supabase = getSupabase()
+      if (!supabase) {
+        if (!cancelled) setStatus('signed-out')
+        return
+      }
+
+      const { data } = await supabase.auth.getSession()
+      if (cancelled) return
+      applySession(data.session)
+
+      const authListener = supabase.auth.onAuthStateChange((_ev, session) => applySession(session))
+      unsubscribeAuth = () => authListener.data.subscription.unsubscribe()
+      appSub = AppState.addEventListener('change', state => {
+        if (state === 'active') void supabase.auth.getSession().then(({ data: d }) => applySession(d.session))
+      })
+
+      if (cancelled) {
+        unsubscribeAuth()
+        appSub.remove()
+      }
+    })()
+
+    return () => {
+      cancelled = true
+      unsubscribeAuth?.()
+      appSub?.remove()
     }
   }, [app])
 
@@ -117,6 +131,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return !!data.user
   }, [app])
 
+  const acceptConsent = useCallback(async () => {
+    if (!user) return
+    await app.profile.setConsent(user.id, CONSENT_VERSION)
+    if (!isDemo) {
+      const supabase = getSupabase()
+      if (supabase) {
+        await app.gateway.upsertProfile(user.id, { consent_at: new Date().toISOString(), consent_version: CONSENT_VERSION })
+      }
+    }
+  }, [app, user, isDemo])
+
   const signUp = useCallback(
     async (email: string, password: string, displayName: string, consent: boolean) => {
       setAuthError(null)
@@ -143,26 +168,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setAuthError(mapAuthError(error.message))
         return false
       }
-      // sessão pode já existir (confirmação desabilitada) ou não (e-mail de confirmação)
       const { data } = await supabase.auth.getSession()
-      if (data.session?.user) {
-        await acceptConsent()
-      }
+      if (data.session?.user) await acceptConsent()
       return true
     },
-    [signIn]
+    [signIn, acceptConsent]
   )
-
-  const acceptConsent = useCallback(async () => {
-    if (!user) return
-    await app.profile.setConsent(user.id, CONSENT_VERSION)
-    if (!isDemo) {
-      const supabase = getSupabase()
-      if (supabase) {
-        await app.gateway.upsertProfile(user.id, { consent_at: new Date().toISOString(), consent_version: CONSENT_VERSION })
-      }
-    }
-  }, [app, user, isDemo])
 
   const signOut = useCallback(async () => {
     if (!isDemo) {
@@ -172,7 +183,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       await AsyncStorage.removeItem(DEMO_KEY)
       setDemo(false)
     }
-    // política de privacidade: logout limpa o espelho local (nunca deixa dado clínico solto no aparelho)
     await app.sync.wipeLocal().catch(() => undefined)
     setUser(null)
     app.setUserId(null)

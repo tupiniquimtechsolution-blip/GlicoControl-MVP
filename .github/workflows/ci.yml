@@ -13,7 +13,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
       - run: npm ci --no-audit --no-fund
       - name: Lint (erros zeram o build)
@@ -21,7 +21,7 @@ jobs:
       - name: Typecheck
         run: npx tsc --noEmit
       - name: Unit + integration + security tests (jest)
-        run: npx jest --forceExit --ci
+        run: npm test
       - name: RLS isolation (PGlite — Postgres real)
         run: bash scripts/rls/run-local.sh
       - name: Audit de contraste/cores dos 5 temas
@@ -39,7 +39,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
       - run: npm ci --no-audit --no-fund
       - name: Expo export (web) — valida o bundle de produção

@@ -2,6 +2,18 @@
 
 O aplicativo terá cinco temas selecionáveis. Todos usam tokens semânticos em vez de cores hardcoded em componentes.
 
+## Identificadores canônicos
+
+| ID | Nome exibido |
+|---|---|
+| `pastelCalm` | Pastel Calm |
+| `greenWhite` | Verde / Branco |
+| `yellowWhite` | Amarelo / Branco |
+| `blackWhite` | Preto / Branco |
+| `blackYellow` | Preto / Amarelo |
+
+Esses IDs são contrato do produto e devem permanecer sincronizados com `src/theme/themes.ts` e `src/theme/palette.ts`.
+
 ## Temas
 
 ### Pastel Calm
