@@ -17,8 +17,18 @@ describe('Supabase auth mobile redirect', () => {
     })
   })
 
-  it('rejeita esquema externo e payload incompleto', () => {
+  it('aceita callback canônico com barra final', () => {
+    expect(parseSupabaseAuthRedirect('glicocontrol://auth-callback/#access_token=a&refresh_token=b&type=signup')).toEqual({
+      accessToken: 'a',
+      refreshToken: 'b',
+      type: 'signup',
+    })
+  })
+
+  it('rejeita esquema, host/rota não canônica e payload incompleto', () => {
     expect(parseSupabaseAuthRedirect('https://evil.example/#access_token=a&refresh_token=b')).toBeNull()
+    expect(parseSupabaseAuthRedirect('glicocontrol://outro#access_token=a&refresh_token=b')).toBeNull()
+    expect(parseSupabaseAuthRedirect('glicocontrol://auth-callback.evil#access_token=a&refresh_token=b')).toBeNull()
     expect(parseSupabaseAuthRedirect('glicocontrol://auth-callback#access_token=a')).toBeNull()
   })
 
