@@ -51,6 +51,8 @@ export default function RootLayout() {
                 <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: 'transparent' } }}>
                   <Stack.Screen name="(auth)" />
                   <Stack.Screen name="(app)" />
+                  <Stack.Screen name="auth-confirm" options={{ headerShown: false }} />
+                  <Stack.Screen name="auth-recovery" options={{ headerShown: false }} />
                   <Stack.Screen name="day/[date]" options={{ presentation: 'card', headerShown: false }} />
                   <Stack.Screen name="reminders-edit" options={{ presentation: 'modal' }} />
                   <Stack.Screen name="reports/[month]" options={{ headerShown: false }} />

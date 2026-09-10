@@ -11,11 +11,17 @@ import { AppState } from 'react-native'
 import { CONSENT_VERSION } from '../../domain/legal/texts'
 import { getSupabase, mapAuthError } from '../../services/supabase/client'
 import { isSupabaseConfigured } from '../../services/supabase/config'
+import { AUTH_CONFIRM_REDIRECT_URL, AUTH_RECOVERY_REDIRECT_URL } from '../../services/supabase/authRedirect'
 import { useApp } from '../../services/appContext'
 import { logEvent } from '../../services/observability/log'
 
 export type AuthUser = { id: string; email: string }
 export type AuthStatus = 'loading' | 'signed-out' | 'signed-in'
+export type SignUpResult = {
+  ok: boolean
+  needsEmailConfirmation: boolean
+  message: string
+}
 
 type AuthApi = {
   user: AuthUser | null
@@ -24,7 +30,7 @@ type AuthApi = {
   isDemo: boolean
   clearError: () => void
   signIn: (email: string, password: string) => Promise<boolean>
-  signUp: (email: string, password: string, displayName: string, consent: boolean) => Promise<boolean>
+  signUp: (email: string, password: string, displayName: string, consent: boolean) => Promise<SignUpResult>
   signOut: () => Promise<void>
   sendPasswordReset: (email: string) => Promise<{ ok: boolean; message: string }>
   acceptConsent: () => Promise<void>
@@ -34,12 +40,57 @@ const Ctx = createContext<AuthApi | null>(null)
 const DEMO_KEY = 'glicocontrol.demo-session'
 const demoOn = typeof process !== 'undefined' && process.env.EXPO_PUBLIC_DEMO_MODE === 'demo-local' && !!(__DEV__ ?? false)
 
+function metadataString(session: Session, key: string): string | null {
+  const value = session.user.user_metadata?.[key]
+  return typeof value === 'string' && value.trim() ? value.trim() : null
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const app = useApp()
   const [status, setStatus] = useState<AuthStatus>('loading')
   const [user, setUser] = useState<AuthUser | null>(null)
   const [isDemo, setDemo] = useState(false)
   const [authError, setAuthError] = useState<string | null>(null)
+
+  const initializeConfirmedProfile = useCallback(async (session: Session) => {
+    const userId = session.user.id
+    const displayName = metadataString(session, 'display_name')
+    const consentVersion = metadataString(session, 'consent_version')
+    const consentAccepted = consentVersion === CONSENT_VERSION && session.user.user_metadata?.consent_accepted === true
+
+    // Remove perfil residual de outra conta (versões anteriores não limpavam local_profile no logout).
+    for (const row of await app.db.select('local_profile')) {
+      if (String(row.id) !== userId) await app.db.deleteById('local_profile', String(row.id))
+    }
+    // setUserId atualiza a referência síncrona e persiste o meta de forma assíncrona;
+    // o primeiro pull precisa do meta já gravado para localizar o profile remoto.
+    await app.db.setMeta('user_id', userId)
+
+    if (app.gateway.configured) {
+      const remote = await app.gateway.pullProfile(userId).catch(() => null)
+      const patch: Record<string, unknown> = {}
+      if (!remote?.display_name && displayName && displayName.length >= 2 && displayName.length <= 80) {
+        patch.display_name = displayName
+      }
+      if (!remote?.consent_at && consentAccepted) {
+        patch.consent_at = new Date().toISOString()
+        patch.consent_version = CONSENT_VERSION
+      }
+      if (Object.keys(patch).length) await app.gateway.upsertProfile(userId, patch).catch(() => undefined)
+      await app.sync.syncNow().catch(() => false)
+      return
+    }
+
+    // Fallback offline: mantém somente os dados de onboarding necessários no aparelho.
+    const local = await app.profile.get()
+    if (!local || local.id !== userId) {
+      await app.profile.save({
+        id: userId,
+        display_name: displayName && displayName.length >= 2 && displayName.length <= 80 ? displayName : null,
+      })
+    }
+    if (consentAccepted) await app.profile.setConsent(userId, CONSENT_VERSION)
+  }, [app])
 
   useEffect(() => {
     let cancelled = false
@@ -52,6 +103,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUser({ id: session.user.id, email: session.user.email ?? '' })
         app.setUserId(session.user.id)
         setStatus('signed-in')
+        void initializeConfirmedProfile(session)
       } else {
         setUser(null)
         app.setUserId(null)
@@ -102,7 +154,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       unsubscribeAuth?.()
       appSub?.remove()
     }
-  }, [app])
+  }, [app, initializeConfirmedProfile])
 
   const signIn = useCallback(async (email: string, password: string) => {
     setAuthError(null)
@@ -143,36 +195,76 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [app, user, isDemo])
 
   const signUp = useCallback(
-    async (email: string, password: string, displayName: string, consent: boolean) => {
+    async (email: string, password: string, displayName: string, consent: boolean): Promise<SignUpResult> => {
       setAuthError(null)
       if (!consent) {
-        setAuthError('É necessário aceitar o termo de consentimento para criar a conta.')
-        return false
+        const message = 'É necessário aceitar o termo de consentimento para criar a conta.'
+        setAuthError(message)
+        return { ok: false, needsEmailConfirmation: false, message }
       }
       if (password.length < 8) {
-        setAuthError('A senha precisa de pelo menos 8 caracteres.')
-        return false
+        const message = 'A senha precisa de pelo menos 8 caracteres.'
+        setAuthError(message)
+        return { ok: false, needsEmailConfirmation: false, message }
       }
-      if (demoOn) return signIn(email, password)
+
+      const cleanName = displayName.trim().slice(0, 80)
+      if (cleanName && cleanName.length < 2) {
+        const message = 'Informe pelo menos 2 caracteres no nome ou deixe o campo vazio.'
+        setAuthError(message)
+        return { ok: false, needsEmailConfirmation: false, message }
+      }
+
+      if (demoOn) {
+        const ok = await signIn(email, password)
+        if (ok) {
+          const id = 'demo-local-user'
+          await app.profile.save({ id, display_name: cleanName || null })
+          await app.profile.setConsent(id, CONSENT_VERSION)
+        }
+        return {
+          ok,
+          needsEmailConfirmation: false,
+          message: ok ? 'Conta local de demonstração criada.' : 'Não foi possível criar a conta local.',
+        }
+      }
+
       const supabase = getSupabase()
       if (!supabase) {
-        setAuthError('Backend não configurado. Ver .env (somente chaves públicas).')
-        return false
+        const message = 'Backend não configurado. Ver .env (somente chaves públicas).'
+        setAuthError(message)
+        return { ok: false, needsEmailConfirmation: false, message }
       }
-      const { error } = await supabase.auth.signUp({
+
+      const { data, error } = await supabase.auth.signUp({
         email: email.trim(),
         password,
-        options: { data: { display_name: displayName.slice(0, 80) } },
+        options: {
+          emailRedirectTo: AUTH_CONFIRM_REDIRECT_URL,
+          data: {
+            display_name: cleanName || null,
+            consent_version: CONSENT_VERSION,
+            consent_accepted: true,
+          },
+        },
       })
       if (error) {
-        setAuthError(mapAuthError(error.message))
-        return false
+        const message = mapAuthError(error.message)
+        setAuthError(message)
+        return { ok: false, needsEmailConfirmation: false, message }
       }
-      const { data } = await supabase.auth.getSession()
-      if (data.session?.user) await acceptConsent()
-      return true
+
+      if (data.session) {
+        return { ok: true, needsEmailConfirmation: false, message: 'Conta criada e sessão iniciada.' }
+      }
+
+      return {
+        ok: true,
+        needsEmailConfirmation: true,
+        message: 'Cadastro recebido. Confira seu e-mail e toque no link de confirmação para ativar a conta.',
+      }
     },
-    [signIn, acceptConsent]
+    [app, signIn]
   )
 
   const signOut = useCallback(async () => {
@@ -193,7 +285,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const sendPasswordReset = useCallback(async (email: string) => {
     if (demoOn || !isSupabaseConfigured()) return { ok: false, message: 'Indisponível neste ambiente.' }
     const supabase = getSupabase()!
-    const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), { redirectTo: 'glicocontrol://reset' })
+    const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), { redirectTo: AUTH_RECOVERY_REDIRECT_URL })
     if (error) return { ok: false, message: mapAuthError(error.message) }
     return { ok: true, message: 'Se o e-mail estiver cadastrado, você receberá um link de redefinição. Confira a caixa de entrada (e spam).' }
   }, [])
