@@ -17,11 +17,32 @@ export default function SignUp() {
   const [password, setPassword] = useState('')
   const [consent, setConsent] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [confirmationMessage, setConfirmationMessage] = useState<string | null>(null)
+
+  if (confirmationMessage) {
+    return (
+      <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', backgroundColor: theme.colors.background, padding: t.spacing.lg }}>
+        <Card style={{ gap: t.spacing.md }}>
+          <Text accessibilityRole="header" style={{ color: theme.colors.text, fontSize: t.typography.sizeHeadline, fontWeight: '800' }}>
+            Confirme seu e-mail
+          </Text>
+          <Text accessibilityLiveRegion="polite" style={{ color: theme.colors.text, fontSize: t.typography.sizeBody, lineHeight: 22 }}>
+            {confirmationMessage}
+          </Text>
+          <Text style={{ color: theme.colors.textMuted, fontSize: t.typography.sizeCaption }}>
+            O link deve abrir o GlicoControl. Se não encontrar a mensagem, confira também a caixa de spam.
+          </Text>
+          <Button label="Ir para entrar" onPress={() => router.replace('/(auth)/sign-in')} fullWidth />
+        </Card>
+      </ScrollView>
+    )
+  }
+
   return (
     <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', backgroundColor: theme.colors.background, padding: t.spacing.lg }}>
       <Card style={{ gap: t.spacing.md }}>
         <Text accessibilityRole="header" style={{ color: theme.colors.text, fontSize: t.typography.sizeHeadline, fontWeight: '800' }}>Criar conta</Text>
-        <Input label="Nome (para o relatório)" value={name} onChangeText={v => { setName(v); clearError() }} helper="Aparece no PDF que você apresenta ao profissional de saúde." accessibilityHint="Opcional pode ficar vazio? Não — recomendado." />
+        <Input label="Nome (para o relatório)" value={name} onChangeText={v => { setName(v); clearError() }} helper="Opcional. Se informado, aparece no PDF que você apresenta ao profissional de saúde." />
         <Input label="E-mail" value={email} onChangeText={v => { setEmail(v); clearError() }} autoCapitalize="none" keyboardType="email-address" textContentType="emailAddress" />
         <Input label="Senha (mín. 8 caracteres)" value={password} onChangeText={v => { setPassword(v); clearError() }} secureTextEntry textContentType="newPassword" />
         <View>
@@ -39,9 +60,14 @@ export default function SignUp() {
           loading={loading}
           onPress={() => {
             setLoading(true)
-            void signUp(email, password, name, consent).then(ok => {
+            void signUp(email, password, name, consent).then(result => {
               setLoading(false)
-              if (ok) router.replace('/(app)')
+              if (!result.ok) return
+              if (result.needsEmailConfirmation) {
+                setConfirmationMessage(result.message)
+                return
+              }
+              router.replace('/(app)')
             })
           }}
           fullWidth
