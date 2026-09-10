@@ -62,6 +62,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     for (const row of await app.db.select('local_profile')) {
       if (String(row.id) !== userId) await app.db.deleteById('local_profile', String(row.id))
     }
+    // setUserId atualiza a referência síncrona e persiste o meta de forma assíncrona;
+    // o primeiro pull precisa do meta já gravado para localizar o profile remoto.
+    await app.db.setMeta('user_id', userId)
 
     if (app.gateway.configured) {
       const remote = await app.gateway.pullProfile(userId).catch(() => null)
