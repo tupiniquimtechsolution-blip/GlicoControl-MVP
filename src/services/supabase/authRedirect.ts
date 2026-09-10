@@ -4,6 +4,19 @@ export type SupabaseAuthRedirect = {
   type: string | null
 }
 
+const AUTH_CALLBACK_BASE = 'glicocontrol://auth-callback'
+
+function isCanonicalAuthCallback(url: string): boolean {
+  return (
+    url === AUTH_CALLBACK_BASE ||
+    url === `${AUTH_CALLBACK_BASE}/` ||
+    url.startsWith(`${AUTH_CALLBACK_BASE}?`) ||
+    url.startsWith(`${AUTH_CALLBACK_BASE}#`) ||
+    url.startsWith(`${AUTH_CALLBACK_BASE}/?`) ||
+    url.startsWith(`${AUTH_CALLBACK_BASE}/#`)
+  )
+}
+
 function decodePart(value: string): string {
   try {
     return decodeURIComponent(value.replace(/\+/g, ' '))
@@ -25,7 +38,7 @@ function parseParams(part: string): Record<string, string> {
 }
 
 function authParams(url: string): Record<string, string> | null {
-  if (!url.startsWith('glicocontrol://')) return null
+  if (!isCanonicalAuthCallback(url)) return null
   const hashIndex = url.indexOf('#')
   const queryIndex = url.indexOf('?')
   const raw = hashIndex >= 0
@@ -38,8 +51,8 @@ function authParams(url: string): Record<string, string> | null {
 
 /**
  * Extrai a sessão devolvida pelos links de Auth do Supabase em apps nativos.
- * Suporta fragmento (#access_token=...) e query (?access_token=...) sem depender
- * de APIs de URL específicas do browser.
+ * Suporta fragmento (#access_token=...) e query (?access_token=...) somente no
+ * callback canônico do GlicoControl, sem depender de APIs de URL do browser.
  */
 export function parseSupabaseAuthRedirect(url: string): SupabaseAuthRedirect | null {
   const params = authParams(url)
