@@ -1,6 +1,6 @@
 /** Fluxo canônico em nível de componente com o CORE REAL do app (memory-db):
  *  registrar → calendário → lembrete → medicamento → relatório. E2E de device em e2e/. */
-import { act, fireEvent, waitFor } from '@testing-library/react-native'
+import { act, cleanup, fireEvent, waitFor } from '@testing-library/react-native'
 import React from 'react'
 
 import { createHarness } from '../test/harness'
@@ -27,16 +27,20 @@ async function syncAndFlush(syncNow: () => Promise<unknown>) {
   })
 }
 
-afterEach(() => setParams({}))
+afterEach(() => {
+  cleanup()
+  setParams({})
+})
 
 describe('fluxo canônico local-first', () => {
   it('registrar medição → persiste no espelho, agenda sync e aparece no calendário', async () => {
     const h = await createHarness()
     const localDate = todayLocal()
+
     const screen = h.renderApp(<Register />)
     const value = await screen.findByLabelText('Valor da glicemia')
     fireEvent.changeText(value, '118')
-    fireEvent.press(await screen.findByRole('button', { name: /Salvar medição/ }))
+    fireEvent.press(screen.getByRole('button', { name: /Salvar medição/ }))
     await waitFor(async () => {
       const rows = await h.db.select('glucose_measurements')
       expect(rows).toHaveLength(1)
@@ -50,24 +54,29 @@ describe('fluxo canônico local-first', () => {
     expect(serverRows).toHaveLength(1)
     expect(await h.db.select('sync_outbox')).toHaveLength(0)
     expect(await h.core.measurements.listByDay(localDate)).toHaveLength(1)
+    screen.unmount()
 
     setParams({})
     const cal = h.renderApp(<Calendar />)
     await waitFor(() => expect(cal.toJSON()).not.toBeNull())
     const tree = JSON.stringify(cal.toJSON())
     expect(tree).toContain('1 ✓')
+    cal.unmount()
 
     const dash = h.renderApp(<Dashboard />)
     await waitFor(() => expect(JSON.stringify(dash.toJSON())).toContain('118'))
-  })
+    dash.unmount()
+  }, 15_000)
 
   it('validação no form: valor vazio bloqueia salvar (sem tocar no banco)', async () => {
     const h = await createHarness()
     const screen = h.renderApp(<Register />)
-    fireEvent.press(await screen.findByRole('button', { name: /Salvar medição/ }))
+    const save = await screen.findByRole('button', { name: /Salvar medição/ })
+    fireEvent.press(save)
     await waitFor(() => expect(screen.getByText(/Informe o valor da medição/)).toBeTruthy())
     const rows = await h.db.select('glucose_measurements')
     expect(rows).toHaveLength(0)
+    screen.unmount()
   })
 
   it('meta configurada: valor fora da faixa vira TEXTO de aviso — não cor isolada', async () => {
