@@ -26,6 +26,8 @@ jobs:
         run: bash scripts/rls/run-local.sh
       - name: Audit de contraste/cores dos 5 temas
         run: node scripts/audit/contrast-audit.mjs
+      - name: Consistência do appId Android/Maestro
+        run: node scripts/audit/app-id-consistency.mjs
       - name: Secret scan
         run: bash scripts/audit/secret-scan.sh
       - name: Textos clínicos proibidos

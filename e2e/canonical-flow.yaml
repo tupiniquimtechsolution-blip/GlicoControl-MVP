@@ -1,11 +1,14 @@
-# Fluxo canônico E2E (Maestro) — exige device/emulador com o app (não roda neste sandbox).
-# Uso:  npx expo start (ou dev build)  &&  maestro test e2e/canonical-flow.yaml
-# Seletores = textos/labels reais das telas + testIDs (login-*, register-value, glucose-value,
-# reminder-label, medication-name). Ver e2e/README.md.
-appId: com.glicocontrol.mvp
+# Fluxo canônico E2E (Maestro) para build de desenvolvimento com
+# EXPO_PUBLIC_DEMO_MODE=demo-local. O modo demo é DEV-only e mantém dados no aparelho.
+# Para Supabase real, Auth/RLS/sync têm gates separados e não usam estas credenciais fictícias.
+appId: app.tupiniquim.glicocontrol
 ---
-- launchApp
-# 1. Login com conta de teste
+- launchApp:
+    clearState: true
+
+# 1. Entrada pelo fluxo real de navegação: boas-vindas → login
+- assertVisible: "GlicoControl"
+- tapOn: "Já tenho conta — Entrar"
 - tapOn:
     id: "login-email"
 - inputText: "e2e@glicocontrol.test"
@@ -13,8 +16,10 @@ appId: com.glicocontrol.mvp
     id: "login-password"
 - inputText: "senha-de-teste-123"
 - tapOn: "Entrar"
+
 # 2. Dashboard carregado
 - assertVisible: "Registrar glicemia"
+
 # 3. Registrar medição pelo atalho do dashboard
 - tapOn: "➕ Registrar medição"
 - tapOn:
@@ -22,14 +27,16 @@ appId: com.glicocontrol.mvp
 - inputText: "112"
 - tapOn: "Salvar medição"
 - assertVisible: "Medição salva."
+
 # 4. Dashboard reflete a última medição
-- tapOn: "Início"
 - assertVisible: "Última medição"
 - assertVisible: "112"
+
 # 5. Calendário marca o dia com registros
 - tapOn: "Calendário"
 - assertVisible: "Calendário"
-# 6. Lembrete novo (dias + hora)
+
+# 6. Lembrete novo
 - tapOn: "Lembretes"
 - tapOn: "➕ Criar lembrete"
 - tapOn:
@@ -37,16 +44,24 @@ appId: com.glicocontrol.mvp
 - inputText: "Glicemia matinal"
 - tapOn: "Salvar"
 - assertVisible: "Glicemia matinal"
+
 # 7. Medicamento + log de adesão manual por toque
+- tapOn: "Início"
 - tapOn: "Gerenciar medicamentos"
-- tapOn: "Salvar"            # abre form; botão principal da tela de medicações
+- tapOn: "Cadastrar medicamento"
 - tapOn:
     id: "medication-name"
 - inputText: "Metformina"
+- tapOn: "Dose (texto livre)"
+- inputText: "1 comprimido"
 - tapOn: "Salvar"
 - assertVisible: "Metformina"
-- tapOn: "✓ Tomei"
-# 8. Relatório do mês → PDF no aparelho → compartilhar (toque explícito)
+- tapOn: "Registrar: Tomei"
+- assertVisible: "Ação “Tomei” registrada por você."
+
+# 8. Relatório do mês → PDF no aparelho
+- back
 - tapOn: "Relatórios"
+- tapOn: "Abrir relatório deste mês"
 - tapOn: "🖨 Gerar PDF (no meu aparelho)"
-- assertVisible: "Gerado com sucesso"
+- assertVisible: "PDF gerado neste dispositivo."
