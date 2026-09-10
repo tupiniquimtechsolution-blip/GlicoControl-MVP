@@ -1,19 +1,25 @@
-export type SupabaseAuthRedirect = {
-  accessToken: string
-  refreshToken: string
-  type: string | null
+export type AuthCallbackKind = 'confirm' | 'recovery'
+
+export type SupabasePkceRedirect = {
+  code: string
 }
 
-const AUTH_CALLBACK_BASE = 'glicocontrol://auth-callback'
+export const AUTH_CONFIRM_REDIRECT_URL = 'glicocontrol://auth-confirm'
+export const AUTH_RECOVERY_REDIRECT_URL = 'glicocontrol://auth-recovery'
 
-function isCanonicalAuthCallback(url: string): boolean {
+function callbackBase(kind: AuthCallbackKind): string {
+  return kind === 'confirm' ? AUTH_CONFIRM_REDIRECT_URL : AUTH_RECOVERY_REDIRECT_URL
+}
+
+function isCanonicalCallback(url: string, kind: AuthCallbackKind): boolean {
+  const base = callbackBase(kind)
   return (
-    url === AUTH_CALLBACK_BASE ||
-    url === `${AUTH_CALLBACK_BASE}/` ||
-    url.startsWith(`${AUTH_CALLBACK_BASE}?`) ||
-    url.startsWith(`${AUTH_CALLBACK_BASE}#`) ||
-    url.startsWith(`${AUTH_CALLBACK_BASE}/?`) ||
-    url.startsWith(`${AUTH_CALLBACK_BASE}/#`)
+    url === base ||
+    url === `${base}/` ||
+    url.startsWith(`${base}?`) ||
+    url.startsWith(`${base}#`) ||
+    url.startsWith(`${base}/?`) ||
+    url.startsWith(`${base}/#`)
   )
 }
 
@@ -37,8 +43,8 @@ function parseParams(part: string): Record<string, string> {
   return out
 }
 
-function authParams(url: string): Record<string, string> | null {
-  if (!isCanonicalAuthCallback(url)) return null
+function authParams(url: string, kind: AuthCallbackKind): Record<string, string> | null {
+  if (!isCanonicalCallback(url, kind)) return null
   const hashIndex = url.indexOf('#')
   const queryIndex = url.indexOf('?')
   const raw = hashIndex >= 0
@@ -50,22 +56,17 @@ function authParams(url: string): Record<string, string> | null {
 }
 
 /**
- * Extrai a sessão devolvida pelos links de Auth do Supabase em apps nativos.
- * Suporta fragmento (#access_token=...) e query (?access_token=...) somente no
- * callback canônico do GlicoControl, sem depender de APIs de URL do browser.
+ * PKCE: o deep link aceita apenas o Auth Code de uso único. Access/refresh tokens
+ * nunca são lidos do URL e só são obtidos após exchangeCodeForSession no aparelho
+ * que iniciou o fluxo e possui o code verifier correspondente.
  */
-export function parseSupabaseAuthRedirect(url: string): SupabaseAuthRedirect | null {
-  const params = authParams(url)
-  if (!params?.access_token || !params.refresh_token) return null
-
-  return {
-    accessToken: params.access_token,
-    refreshToken: params.refresh_token,
-    type: params.type ?? null,
-  }
+export function parseSupabasePkceRedirect(url: string, kind: AuthCallbackKind): SupabasePkceRedirect | null {
+  const params = authParams(url, kind)
+  if (!params?.code) return null
+  return { code: params.code }
 }
 
-export function parseSupabaseAuthError(url: string): string | null {
-  const params = authParams(url)
+export function parseSupabaseAuthError(url: string, kind: AuthCallbackKind): string | null {
+  const params = authParams(url, kind)
   return params?.error_description ?? params?.error ?? null
 }
