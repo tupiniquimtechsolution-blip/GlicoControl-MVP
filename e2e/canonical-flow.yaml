@@ -2,7 +2,7 @@
 # Uso:  npx expo start (ou dev build)  &&  maestro test e2e/canonical-flow.yaml
 # Seletores = textos/labels reais das telas + testIDs (login-*, register-value, glucose-value,
 # reminder-label, medication-name). Ver e2e/README.md.
-appId: com.glicocontrol.mvp
+appId: app.tupiniquim.glicocontrol
 ---
 - launchApp
 # 1. Login com conta de teste
