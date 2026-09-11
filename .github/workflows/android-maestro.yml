@@ -21,6 +21,7 @@ jobs:
       CI: '1'
       NODE_ENV: development
       EXPO_PUBLIC_DEMO_MODE: demo-local
+      EXPO_NO_DEV_TOOLS: '1'
       MAESTRO_CLI_NO_ANALYTICS: '1'
 
     steps:
@@ -98,7 +99,8 @@ jobs:
           adb install -r "$APK"
           adb reverse tcp:8081 tcp:8081
 
-          EXPO_PUBLIC_DEMO_MODE=demo-local CI=1 NODE_ENV=development npx expo start --localhost --port 8081 > "$METRO_LOG" 2>&1 &
+          EXPO_PUBLIC_DEMO_MODE=demo-local EXPO_NO_DEV_TOOLS=1 CI=1 NODE_ENV=development \
+            npx expo start --localhost --port 8081 > "$METRO_LOG" 2>&1 &
           METRO_PID=$!
           cleanup() {
             kill "$METRO_PID" 2>/dev/null || true
@@ -107,7 +109,10 @@ jobs:
 
           READY=0
           for _ in $(seq 1 90); do
-            if curl --fail --silent http://127.0.0.1:8081/status | grep -q 'packager-status:running'; then
+            # Expo/Metro versions do not guarantee a stable /status payload. For
+            # this device gate, an HTTP response from Metro is the readiness signal;
+            # the app launch below performs the actual bundle request.
+            if curl --silent --max-time 2 http://127.0.0.1:8081/ >/dev/null 2>&1; then
               READY=1
               break
             fi
