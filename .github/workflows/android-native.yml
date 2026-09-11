@@ -16,9 +16,10 @@ concurrency:
 jobs:
   android-debug-build:
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 45
     env:
       CI: '1'
+      EXPO_PUBLIC_DEMO_MODE: demo-local
 
     steps:
       - name: Checkout
@@ -59,7 +60,7 @@ jobs:
           chmod +x gradlew
           ./gradlew :app:assembleDebug --no-daemon --stacktrace
 
-      - name: Verify APK output
+      - name: Verify debug APK output
         shell: bash
         run: |
           APK='android/app/build/outputs/apk/debug/app-debug.apk'
@@ -67,11 +68,37 @@ jobs:
           echo 'ANDROID_NATIVE_GATE=PASS'
           du -h "$APK"
 
-      - name: Publish debug APK for testing
+      - name: Publish debug APK for development testing
         uses: actions/upload-artifact@v4
         with:
           name: glicocontrol-debug-apk
           path: android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 0
+
+      - name: Compile standalone test APK
+        working-directory: android
+        env:
+          NODE_ENV: production
+          EXPO_PUBLIC_DEMO_MODE: demo-local
+        run: |
+          ./gradlew :app:assembleRelease --no-daemon --stacktrace
+
+      - name: Verify standalone test APK output
+        shell: bash
+        run: |
+          APK='android/app/build/outputs/apk/release/app-release.apk'
+          test -s "$APK"
+          echo 'ANDROID_STANDALONE_TEST_APK=PASS'
+          du -h "$APK"
+          sha256sum "$APK"
+
+      - name: Publish standalone APK for manual testing
+        uses: actions/upload-artifact@v4
+        with:
+          name: glicocontrol-standalone-test-apk
+          path: android/app/build/outputs/apk/release/app-release.apk
           if-no-files-found: error
           retention-days: 7
           compression-level: 0
