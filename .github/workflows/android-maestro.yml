@@ -1,0 +1,176 @@
+name: Android Maestro Emulator Gate
+
+on:
+  pull_request:
+    branches:
+      - agent/fullstack-mvp
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-maestro-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  maestro-android:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    env:
+      CI: '1'
+      NODE_ENV: development
+      EXPO_PUBLIC_DEMO_MODE: demo-local
+      EXPO_NO_DEV_TOOLS: '1'
+      MAESTRO_CLI_NO_ANALYTICS: '1'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Ensure Android SDK 36 and Expo SDK 57 NDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          test -x "$SDKMANAGER"
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" \
+            'platforms;android-36' \
+            'build-tools;36.0.0' \
+            'ndk;27.1.12297006'
+
+      - name: Generate native Android project
+        run: npx expo prebuild --platform android --clean --no-install
+
+      # O Android Native Gate separado cobre o APK multi-ABI completo. Este job
+      # executa somente no emulador x86_64 para reduzir tempo sem reduzir cobertura E2E.
+      - name: Compile x86_64 debug APK for emulator test
+        working-directory: android
+        run: |
+          chmod +x gradlew
+          ./gradlew :app:assembleDebug -PreactNativeArchitectures=x86_64 --no-daemon --stacktrace
+
+      - name: Install pinned Maestro CLI 2.7.0
+        shell: bash
+        run: |
+          set -euo pipefail
+          MAESTRO_ZIP=/tmp/maestro-2.7.0.zip
+          curl --fail --location --silent --show-error \
+            'https://github.com/mobile-dev-inc/Maestro/releases/download/cli-2.7.0/maestro.zip' \
+            --output "$MAESTRO_ZIP"
+          echo 'a4ccab6b604617e7aef6db4f885666056eabe5cfa32befaa3bc994041b8fcbb5  /tmp/maestro-2.7.0.zip' | sha256sum -c -
+          rm -rf "$HOME/.maestro"
+          mkdir -p "$HOME/.maestro/tmp"
+          unzip -q "$MAESTRO_ZIP" -d "$HOME/.maestro/tmp"
+          cp -rf "$HOME/.maestro/tmp/maestro/"* "$HOME/.maestro/"
+          rm -rf "$HOME/.maestro/tmp" "$MAESTRO_ZIP"
+          echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
+          "$HOME/.maestro/bin/maestro" --version | tee /tmp/maestro-version.txt
+          grep -F '2.7.0' /tmp/maestro-version.txt
+
+      - name: Prepare emulator test script
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > "$RUNNER_TEMP/glicocontrol-maestro.sh" <<'BASH'
+          #!/usr/bin/env bash
+          set -euo pipefail
+
+          APK='android/app/build/outputs/apk/debug/app-debug.apk'
+          METRO_LOG='/tmp/glicocontrol-metro.log'
+
+          test -s "$APK"
+          adb install -r "$APK"
+          adb reverse tcp:8081 tcp:8081
+
+          EXPO_PUBLIC_DEMO_MODE=demo-local EXPO_NO_DEV_TOOLS=1 CI=1 NODE_ENV=development \
+            npx expo start --localhost --port 8081 > "$METRO_LOG" 2>&1 &
+          METRO_PID=$!
+          cleanup() {
+            kill "$METRO_PID" 2>/dev/null || true
+          }
+          trap cleanup EXIT
+
+          READY=0
+          for _ in $(seq 1 90); do
+            # Expo/Metro em modo CI pode manter a porta aberta sem expor um
+            # endpoint HTTP de healthcheck estável. O gate precisa somente que o
+            # servidor esteja escutando; o launchApp do Maestro fará a requisição
+            # real do bundle logo em seguida.
+            if timeout 2 bash -c '</dev/tcp/127.0.0.1/8081' 2>/dev/null; then
+              READY=1
+              break
+            fi
+            if ! kill -0 "$METRO_PID" 2>/dev/null; then
+              echo 'Metro encerrou antes de ficar pronto.'
+              cat "$METRO_LOG"
+              exit 1
+            fi
+            sleep 2
+          done
+
+          if [[ "$READY" != '1' ]]; then
+            echo 'Metro não abriu a porta 8081 no prazo.'
+            cat "$METRO_LOG"
+            exit 1
+          fi
+
+          adb shell getprop ro.build.version.sdk
+          "$HOME/.maestro/bin/maestro" --version
+
+          if ! "$HOME/.maestro/bin/maestro" test e2e/canonical-flow.yaml; then
+            echo 'MAESTRO_E2E=FAIL'
+            echo '--- Metro log ---'
+            tail -n 250 "$METRO_LOG" || true
+            exit 1
+          fi
+
+          echo 'MAESTRO_E2E=PASS'
+          BASH
+          chmod +x "$RUNNER_TEMP/glicocontrol-maestro.sh"
+
+      - name: Enable KVM group permissions
+        shell: bash
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      # Third-party action pinned to the exact commit behind v2.38.0.
+      # API 34 is deliberately conservative for Maestro/device stability; the app
+      # itself continues compiling against Android SDK 36 in the previous steps.
+      # android-emulator-runner executes each `script` line in a separate shell,
+      # therefore this field intentionally contains one command only.
+      - name: Run canonical flow on Android emulator
+        uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d
+        with:
+          api-level: 34
+          target: google_apis
+          arch: x86_64
+          profile: pixel_7
+          cores: 2
+          ram-size: 2048M
+          emulator-boot-timeout: 600
+          disable-animations: true
+          disable-spellchecker: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
+          script: bash "$RUNNER_TEMP/glicocontrol-maestro.sh"
+
+      # Sem upload de APK/screenshots/artifacts: logs do Actions bastam para este
+      # gate e evitam armazenamento adicional. Teste usa somente dados demo locais.

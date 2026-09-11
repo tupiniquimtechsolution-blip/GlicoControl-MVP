@@ -1,4 +1,4 @@
-name: Android Native Gate
+name: Android Standalone Test APK
 
 on:
   pull_request:
@@ -10,15 +10,16 @@ permissions:
   contents: read
 
 concurrency:
-  group: android-native-${{ github.ref }}
+  group: android-standalone-apk-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  android-debug-build:
+  build-standalone-apk:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 40
     env:
       CI: '1'
+      NODE_ENV: production
       EXPO_PUBLIC_DEMO_MODE: demo-local
 
     steps:
@@ -43,6 +44,7 @@ jobs:
       - name: Ensure Android SDK 36 and Expo SDK 57 NDK
         shell: bash
         run: |
+          set -euo pipefail
           SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
           test -x "$SDKMANAGER"
           yes | "$SDKMANAGER" --licenses >/dev/null || true
@@ -54,47 +56,23 @@ jobs:
       - name: Generate native Android project
         run: npx expo prebuild --platform android --clean --no-install
 
-      - name: Compile debug APK
+      - name: Compile standalone APK
         working-directory: android
         run: |
           chmod +x gradlew
-          ./gradlew :app:assembleDebug --no-daemon --stacktrace
-
-      - name: Verify debug APK output
-        shell: bash
-        run: |
-          APK='android/app/build/outputs/apk/debug/app-debug.apk'
-          test -s "$APK"
-          echo 'ANDROID_NATIVE_GATE=PASS'
-          du -h "$APK"
-
-      - name: Publish debug APK for development testing
-        uses: actions/upload-artifact@v4
-        with:
-          name: glicocontrol-debug-apk
-          path: android/app/build/outputs/apk/debug/app-debug.apk
-          if-no-files-found: error
-          retention-days: 7
-          compression-level: 0
-
-      - name: Compile standalone test APK
-        working-directory: android
-        env:
-          NODE_ENV: production
-          EXPO_PUBLIC_DEMO_MODE: demo-local
-        run: |
           ./gradlew :app:assembleRelease --no-daemon --stacktrace
 
-      - name: Verify standalone test APK output
+      - name: Verify standalone APK
         shell: bash
         run: |
+          set -euo pipefail
           APK='android/app/build/outputs/apk/release/app-release.apk'
           test -s "$APK"
           echo 'ANDROID_STANDALONE_TEST_APK=PASS'
           du -h "$APK"
           sha256sum "$APK"
 
-      - name: Publish standalone APK for manual testing
+      - name: Publish standalone APK
         uses: actions/upload-artifact@v4
         with:
           name: glicocontrol-standalone-test-apk
