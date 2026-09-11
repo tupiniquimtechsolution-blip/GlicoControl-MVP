@@ -83,6 +83,62 @@ jobs:
           "$HOME/.maestro/bin/maestro" --version | tee /tmp/maestro-version.txt
           grep -F '2.7.0' /tmp/maestro-version.txt
 
+      - name: Prepare emulator test script
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > "$RUNNER_TEMP/glicocontrol-maestro.sh" <<'BASH'
+          #!/usr/bin/env bash
+          set -euo pipefail
+
+          APK='android/app/build/outputs/apk/debug/app-debug.apk'
+          METRO_LOG='/tmp/glicocontrol-metro.log'
+
+          test -s "$APK"
+          adb install -r "$APK"
+          adb reverse tcp:8081 tcp:8081
+
+          EXPO_PUBLIC_DEMO_MODE=demo-local CI=1 NODE_ENV=development npx expo start --localhost --port 8081 > "$METRO_LOG" 2>&1 &
+          METRO_PID=$!
+          cleanup() {
+            kill "$METRO_PID" 2>/dev/null || true
+          }
+          trap cleanup EXIT
+
+          READY=0
+          for _ in $(seq 1 90); do
+            if curl --fail --silent http://127.0.0.1:8081/status | grep -q 'packager-status:running'; then
+              READY=1
+              break
+            fi
+            if ! kill -0 "$METRO_PID" 2>/dev/null; then
+              echo 'Metro encerrou antes de ficar pronto.'
+              cat "$METRO_LOG"
+              exit 1
+            fi
+            sleep 2
+          done
+
+          if [[ "$READY" != '1' ]]; then
+            echo 'Metro não ficou pronto no prazo.'
+            cat "$METRO_LOG"
+            exit 1
+          fi
+
+          adb shell getprop ro.build.version.sdk
+          "$HOME/.maestro/bin/maestro" --version
+
+          if ! "$HOME/.maestro/bin/maestro" test e2e/canonical-flow.yaml; then
+            echo 'MAESTRO_E2E=FAIL'
+            echo '--- Metro log ---'
+            tail -n 250 "$METRO_LOG" || true
+            exit 1
+          fi
+
+          echo 'MAESTRO_E2E=PASS'
+          BASH
+          chmod +x "$RUNNER_TEMP/glicocontrol-maestro.sh"
+
       - name: Enable KVM group permissions
         shell: bash
         run: |
@@ -93,8 +149,8 @@ jobs:
       # Third-party action pinned to the exact commit behind v2.38.0.
       # API 34 is deliberately conservative for Maestro/device stability; the app
       # itself continues compiling against Android SDK 36 in the previous steps.
-      # android-emulator-runner invokes this `script` with /usr/bin/sh (dash), so
-      # the commands below deliberately use POSIX syntax and do not use pipefail.
+      # android-emulator-runner executes each `script` line in a separate shell,
+      # therefore this field intentionally contains one command only.
       - name: Run canonical flow on Android emulator
         uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d
         with:
@@ -108,48 +164,7 @@ jobs:
           disable-animations: true
           disable-spellchecker: true
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
-          script: |
-            set -eu
-            APK='android/app/build/outputs/apk/debug/app-debug.apk'
-            test -s "$APK"
-            adb install -r "$APK"
-            adb reverse tcp:8081 tcp:8081
-
-            EXPO_PUBLIC_DEMO_MODE=demo-local CI=1 NODE_ENV=development npx expo start --localhost --port 8081 > /tmp/glicocontrol-metro.log 2>&1 &
-            METRO_PID=$!
-            cleanup() {
-              kill "$METRO_PID" 2>/dev/null || true
-            }
-            trap cleanup EXIT
-
-            READY=0
-            for _ in $(seq 1 90); do
-              if curl --fail --silent http://127.0.0.1:8081/status | grep -q 'packager-status:running'; then
-                READY=1
-                break
-              fi
-              if ! kill -0 "$METRO_PID" 2>/dev/null; then
-                echo 'Metro encerrou antes de ficar pronto.'
-                cat /tmp/glicocontrol-metro.log
-                exit 1
-              fi
-              sleep 2
-            done
-            if [ "$READY" != '1' ]; then
-              echo 'Metro não ficou pronto no prazo.'
-              cat /tmp/glicocontrol-metro.log
-              exit 1
-            fi
-
-            adb shell getprop ro.build.version.sdk
-            "$HOME/.maestro/bin/maestro" --version
-            if ! "$HOME/.maestro/bin/maestro" test e2e/canonical-flow.yaml; then
-              echo 'MAESTRO_E2E=FAIL'
-              echo '--- Metro log ---'
-              tail -n 250 /tmp/glicocontrol-metro.log || true
-              exit 1
-            fi
-            echo 'MAESTRO_E2E=PASS'
+          script: bash "$RUNNER_TEMP/glicocontrol-maestro.sh"
 
       # Sem upload de APK/screenshots/artifacts: logs do Actions bastam para este
       # gate e evitam armazenamento adicional. Teste usa somente dados demo locais.
