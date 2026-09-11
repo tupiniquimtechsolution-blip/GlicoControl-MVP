@@ -1,0 +1,82 @@
+name: Android Development Build
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches:
+      - agent/fullstack-mvp
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-development-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  development-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      CI: '1'
+      EXPO_PUBLIC_DEMO_MODE: demo-local
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Install project dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Add pinned Expo development client for this build
+        run: npm install --no-save --package-lock=false --no-audit --no-fund expo-dev-client@57.0.18
+
+      - name: Ensure Android SDK 36 and Expo SDK 57 NDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          test -x "$SDKMANAGER"
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" \
+            'platforms;android-36' \
+            'build-tools;36.0.0' \
+            'ndk;27.1.12297006'
+
+      - name: Generate native Android project
+        run: npx expo prebuild --platform android --clean --no-install
+
+      - name: Compile development client APK
+        working-directory: android
+        run: |
+          chmod +x gradlew
+          ./gradlew :app:assembleDebug --no-daemon --stacktrace
+
+      - name: Verify development client APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK='android/app/build/outputs/apk/debug/app-debug.apk'
+          test -s "$APK"
+          echo 'ANDROID_DEVELOPMENT_BUILD=PASS'
+          du -h "$APK"
+
+      - name: Publish development client APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: glicocontrol-development-client
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 7
