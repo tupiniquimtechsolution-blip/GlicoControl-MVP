@@ -67,6 +67,11 @@ jobs:
           echo 'ANDROID_NATIVE_GATE=PASS'
           du -h "$APK"
 
-      # Deliberadamente não fazemos upload do APK como artifact para manter
-      # este gate sem consumo de armazenamento de Actions. O objetivo é provar
-      # compilação nativa; distribuição/assinatura é um gate posterior.
+      - name: Publish debug APK for testing
+        uses: actions/upload-artifact@v4
+        with:
+          name: glicocontrol-debug-apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 0
