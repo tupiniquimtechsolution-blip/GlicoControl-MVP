@@ -109,10 +109,11 @@ jobs:
 
           READY=0
           for _ in $(seq 1 90); do
-            # Expo/Metro versions do not guarantee a stable /status payload. For
-            # this device gate, an HTTP response from Metro is the readiness signal;
-            # the app launch below performs the actual bundle request.
-            if curl --silent --max-time 2 http://127.0.0.1:8081/ >/dev/null 2>&1; then
+            # Expo/Metro em modo CI pode manter a porta aberta sem expor um
+            # endpoint HTTP de healthcheck estável. O gate precisa somente que o
+            # servidor esteja escutando; o launchApp do Maestro fará a requisição
+            # real do bundle logo em seguida.
+            if timeout 2 bash -c '</dev/tcp/127.0.0.1/8081' 2>/dev/null; then
               READY=1
               break
             fi
@@ -125,7 +126,7 @@ jobs:
           done
 
           if [[ "$READY" != '1' ]]; then
-            echo 'Metro não ficou pronto no prazo.'
+            echo 'Metro não abriu a porta 8081 no prazo.'
             cat "$METRO_LOG"
             exit 1
           fi
