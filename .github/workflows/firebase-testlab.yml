@@ -32,7 +32,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 55
     env:
-      FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID }}
+      # Public Firebase / Google Cloud project identifier from the Firebase Console.
+      FIREBASE_PROJECT_ID: teste-d2d1d
       WIF_PROVIDER: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
       WIF_SERVICE_ACCOUNT: ${{ vars.GCP_SERVICE_ACCOUNT }}
 
@@ -41,11 +42,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test -n "$FIREBASE_PROJECT_ID" || { echo 'Configure repository variable FIREBASE_PROJECT_ID.'; exit 1; }
+          test "$FIREBASE_PROJECT_ID" = 'teste-d2d1d'
           test -n "$WIF_PROVIDER" || { echo 'Configure repository variable GCP_WORKLOAD_IDENTITY_PROVIDER.'; exit 1; }
           test -n "$WIF_SERVICE_ACCOUNT" || { echo 'Configure repository variable GCP_SERVICE_ACCOUNT.'; exit 1; }
           echo 'This workflow is intentionally manual and runs one virtual-device matrix per dispatch.'
-          echo 'Keep the Firebase project on the Spark plan; do not attach a billing account.'
+          echo 'Keep Firebase project teste-d2d1d on the Spark plan; do not attach a billing account.'
 
       - name: Checkout
         uses: actions/checkout@v4
