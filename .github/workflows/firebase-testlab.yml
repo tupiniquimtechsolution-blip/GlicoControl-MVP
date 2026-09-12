@@ -1,0 +1,142 @@
+name: Firebase Test Lab — Robo (Spark)
+
+on:
+  workflow_dispatch:
+    inputs:
+      model:
+        description: 'Firebase Test Lab virtual model ID'
+        required: true
+        default: 'MediumPhone.arm'
+        type: string
+      android_version:
+        description: 'Android version/API supported by the selected model'
+        required: true
+        default: '34'
+        type: string
+      timeout:
+        description: 'Robo test timeout'
+        required: true
+        default: '5m'
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: firebase-testlab-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  robo-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    env:
+      # Public Firebase / Google Cloud project identifier from the Firebase Console.
+      FIREBASE_PROJECT_ID: teste-d2d1d
+      WIF_PROVIDER: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+      WIF_SERVICE_ACCOUNT: ${{ vars.GCP_SERVICE_ACCOUNT }}
+
+    steps:
+      - name: Validate zero-cost Test Lab configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$FIREBASE_PROJECT_ID" = 'teste-d2d1d'
+          test -n "$WIF_PROVIDER" || { echo 'Configure repository variable GCP_WORKLOAD_IDENTITY_PROVIDER.'; exit 1; }
+          test -n "$WIF_SERVICE_ACCOUNT" || { echo 'Configure repository variable GCP_SERVICE_ACCOUNT.'; exit 1; }
+          echo 'This workflow is intentionally manual and runs one virtual-device matrix per dispatch.'
+          echo 'Keep Firebase project teste-d2d1d on the Spark plan; do not attach a billing account.'
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Ensure Android SDK 36 and Expo SDK 57 NDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          test -x "$SDKMANAGER"
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" \
+            'platforms;android-36' \
+            'build-tools;36.0.0' \
+            'ndk;27.1.12297006'
+
+      - name: Generate native Android project
+        env:
+          CI: '1'
+          NODE_ENV: production
+          EXPO_PUBLIC_DEMO_MODE: demo-local
+        run: npx expo prebuild --platform android --clean --no-install
+
+      - name: Compile standalone release APK
+        working-directory: android
+        env:
+          CI: '1'
+          NODE_ENV: production
+          EXPO_PUBLIC_DEMO_MODE: demo-local
+        run: |
+          chmod +x gradlew
+          ./gradlew :app:assembleRelease --no-daemon --stacktrace
+
+      - name: Verify standalone APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK='android/app/build/outputs/apk/release/app-release.apk'
+          test -s "$APK"
+          unzip -l "$APK" | grep -F 'assets/index.android.bundle'
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify "$APK"
+
+      - name: Authenticate to Google Cloud with OIDC
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.WIF_SERVICE_ACCOUNT }}
+
+      - name: Setup gcloud
+        uses: google-github-actions/setup-gcloud@v3
+        with:
+          project_id: ${{ env.FIREBASE_PROJECT_ID }}
+
+      - name: Show selected Test Lab virtual device
+        shell: bash
+        run: |
+          set -euo pipefail
+          gcloud firebase test android models list \
+            --project="$FIREBASE_PROJECT_ID" \
+            --filter="id=${{ inputs.model }}" \
+            --format='table(id,form,supportedVersionIds)'
+
+      - name: Run one Robo matrix on a virtual device
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK='android/app/build/outputs/apk/release/app-release.apk'
+          gcloud firebase test android run \
+            --project="$FIREBASE_PROJECT_ID" \
+            --type=robo \
+            --app="$APK" \
+            --device="model=${{ inputs.model }},version=${{ inputs.android_version }},locale=pt_BR,orientation=portrait" \
+            --timeout="${{ inputs.timeout }}" \
+            --client-details="matrixLabel=GlicoControl-${GITHUB_SHA::7}"
+
+      - name: Record gate status
+        if: success()
+        run: echo 'FIREBASE_TEST_LAB_GATE=PASS'
