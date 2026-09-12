@@ -28,14 +28,21 @@ jobs:
           node-version: 22
           cache: npm
 
-      - name: Setup Java 17
-        uses: actions/setup-java@v6
-        with:
-          distribution: temurin
-          java-version: '17'
+      - name: Generate canonical buffer dependency lock
+        run: npm install --package-lock-only --ignore-scripts --save-exact buffer@6.0.3
 
       - name: Install dependencies
         run: npm ci --no-audit --no-fund
+
+      - name: Publish generated dependency lockfiles
+        uses: actions/upload-artifact@v4
+        with:
+          name: buffer-release-lockfiles
+          path: |
+            package.json
+            package-lock.json
+          if-no-files-found: error
+          retention-days: 1
 
       - name: Ensure Android SDK 36 and Expo SDK 57 NDK
         shell: bash
