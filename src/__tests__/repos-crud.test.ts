@@ -101,12 +101,16 @@ describe('medications: nada automático', () => {
   it('nextDue só considera ativos com horário futuro de hoje', async () => {
     const db = await createMemoryDb()
     const repo = new MedicationRepo(db, userId)
+    const now = new Date(2026, 8, 9, 12, 0, 0, 0)
+    const today = now.getDay()
+
     const med = await repo.create('Ômega', '1 cápsula', null)
-    await repo.addSchedule(med.id, '23:59', [new Date().getDay()])
-    expect(await repo.nextDue()).toBeTruthy()
+    await repo.addSchedule(med.id, '13:00', [today])
+    expect(await repo.nextDue(now)).toBeTruthy()
+
     const past = await repo.create('Cálcio', '1cp', null)
-    await repo.addSchedule(past.id, '00:01', [new Date().getDay()])
-    const due = await repo.nextDue()
+    await repo.addSchedule(past.id, '11:00', [today])
+    const due = await repo.nextDue(now)
     expect(due?.medication.name).toBe('Ômega')
   })
 })

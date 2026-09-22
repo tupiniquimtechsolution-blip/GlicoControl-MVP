@@ -18,7 +18,8 @@ appId: app.tupiniquim.glicocontrol
 - tapOn: "Entrar"
 
 # 2. Dashboard carregado
-- assertVisible: "Registrar glicemia"
+- assertVisible: "Última medição"
+- assertVisible: "➕ Registrar medição"
 
 # 3. Registrar medição pelo atalho do dashboard
 - tapOn: "➕ Registrar medição"
@@ -56,7 +57,7 @@ appId: app.tupiniquim.glicocontrol
 - inputText: "1 comprimido"
 - tapOn: "Salvar"
 - assertVisible: "Metformina"
-- tapOn: "Registrar: Tomei"
+- tapOn: ".*Tomei.*"
 - assertVisible: "Ação “Tomei” registrada por você."
 
 # 8. Relatório do mês → PDF no aparelho
